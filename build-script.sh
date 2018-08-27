@@ -4,7 +4,7 @@ set -u
 set -e
 
 # Bonita version
-BONITA_BPM_VERSION=7.7.2
+BONITA_BPM_VERSION=7.7.3
 
 # Test that Mavene exists
 if hash mvn 2>/dev/null; then
@@ -16,7 +16,7 @@ else
 fi
 
 # Get the location of Tomcat and WildFly zip files as script argument or ask the user
-# Fro version 7.7.2: apache-tomcat-8.5.31.zip and wildfly-10.1.0.Final.zip
+# Fro version 7.7.3: apache-tomcat-8.5.31.zip and wildfly-10.1.0.Final.zip
 if [ "$#" -eq 1 ]; then
   AS_DIR_PATH=$1
 else
@@ -137,6 +137,10 @@ maven_test_skip() {
   build_command="$build_command -Dmaven.test.skip=true"
 }
 
+maven_javadoc_skip() {
+  build_command="$build_command -Dmaven.javadoc.skip=true"
+}
+
 skiptest() {
   build_command="$build_command -DskipTests"
 }
@@ -191,6 +195,7 @@ build_maven_wrapper_install_maven_test_skip_with_target_directory_with_profile()
   build_maven_wrapper
   install  
   maven_test_skip
+  maven_javadoc_skip
   profile $3
   run_maven_with_standard_system_properties
 }
