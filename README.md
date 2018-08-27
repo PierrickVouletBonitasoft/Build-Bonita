@@ -17,4 +17,4 @@ Once finished, you will find a working build of Bonita in: `bonita-studio/all-in
 Requirements
 ------------
 
-This script is designed for Linux Operating System. You are of course free to fork it for Windows or Mac.
+This script is designed for Linux Operating System but also runs on Windows 10 Operating System with PowerShell and Git Bash.
