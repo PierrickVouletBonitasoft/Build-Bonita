@@ -1,7 +1,6 @@
 #/bin/bash
 
 set -u
-set -e
 
 # Bonita version
 BONITA_BPM_VERSION=7.7.3
@@ -16,8 +15,8 @@ else
 fi
 
 # Get the location of Tomcat and WildFly zip files as script argument or ask the user
-# Fro version 7.7.3: apache-tomcat-8.5.31.zip and wildfly-10.1.0.Final.zip
-if [ "$#" -eq 1 ]; then
+# Fro version 7.7.0: apache-tomcat-8.5.31.zip and wildfly-10.1.0.Final.zip
+if [ "$#" -ge 1 ]; then
   AS_DIR_PATH=$1
 else
   read -p "Provide path to folder that contains Tomcat and WildFly zip file: " AS_DIR_PATH
@@ -27,6 +26,20 @@ fi
 if [ ! -d $AS_DIR_PATH ]; then
   echo Folder not found: "$AS_DIR_PATH"
   exit 1
+fi
+
+if [ "$#" -ge 2 ]; then
+  CHECKOUT_ONLY=$2
+  echo Checkout only mode
+else
+  CHECKOUT_ONLY="false"
+fi
+
+if [ "$#" -ge 3 ]; then
+  AUTO=$3
+else
+  AUTO="false"
+  echo Auto mode is disabled
 fi
 
 # List of repositories on https://github.com/bonitasoft that you don't need to build:
@@ -81,28 +94,30 @@ fi
 # - Branch name (optional)
 # - Checkout folder name (optional)
 checkout() {
-  if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
+  if [ "$#" -lt 2 ] || [ "$#" -gt 4 ]; then
      echo "Incorrect number of parameters: $@"
      exit 1
   fi
 
-  repository_name="$1"
+  account_name="$1"
   
-  if [ "$#" -ge 2 ]; then
-    branch_name="$2"
+  repository_name="$2"
+  
+  if [ "$#" -ge 3 ]; then
+    branch_name="$3"
   else
     branch_name=$BONITA_BPM_VERSION
   fi
     
-  if [ "$#" -eq 3 ]; then
-    checkout_folder_name="$3"
+  if [ "$#" -ge 4 ]; then
+    checkout_folder_name="$4"
   else
     # If no checkout folder path is provided use the repository name as destination folder name
     checkout_folder_name="$repository_name"
   fi
   
   # If repository already cloned run git pull, else clone it
-  git -C $checkout_folder_name pull || git clone --branch $branch_name --single-branch "https://github.com/bonitasoft/$repository_name.git" $checkout_folder_name
+  git -C $checkout_folder_name pull || git clone --branch $branch_name --single-branch "https://github.com/$account_name/$repository_name.git" $checkout_folder_name
   
   # Move to the repository clone folder (required to run Maven wrapper)
   cd $checkout_folder_name
@@ -137,10 +152,6 @@ maven_test_skip() {
   build_command="$build_command -Dmaven.test.skip=true"
 }
 
-maven_javadoc_skip() {
-  build_command="$build_command -Dmaven.javadoc.skip=true"
-}
-
 skiptest() {
   build_command="$build_command -DskipTests"
 }
@@ -154,6 +165,10 @@ profile() {
 # - Branch name (optional)
 build_maven_install_maven_test_skip() {
   checkout "$@"
+  if [ $CHECKOUT_ONLY == "true" ]; then
+    cd ..
+	return
+  fi
   build_maven
   install
   maven_test_skip
@@ -166,6 +181,10 @@ build_maven_install_maven_test_skip() {
 # - Branch name (optional)
 build_maven_install_skiptest() {
   checkout "$@"
+  if [ $CHECKOUT_ONLY == "true" ]; then
+    cd ..
+	return
+  fi
   build_maven
   install
   skiptest
@@ -177,11 +196,15 @@ build_maven_install_skiptest() {
 # - Profile name
 build_maven_wrapper_verify_maven_test_skip_with_profile()
 {
-  checkout $1
+  checkout $1 $2
+  if [ $CHECKOUT_ONLY == "true" ]; then
+    cd ..
+	return
+  fi
   build_maven_wrapper
   verify
   maven_test_skip
-  profile $2
+  profile $3
   run_maven_with_standard_system_properties
 }
 
@@ -191,66 +214,137 @@ build_maven_wrapper_verify_maven_test_skip_with_profile()
 # - Profile name
 build_maven_wrapper_install_maven_test_skip_with_target_directory_with_profile()
 {
-  checkout $1 $BONITA_BPM_VERSION $2
+  checkout $1 $2 $BONITA_BPM_VERSION $3
+  if [ $CHECKOUT_ONLY == "true" ]; then
+    cd ..
+	return
+  fi
   build_maven_wrapper
   install  
   maven_test_skip
-  maven_javadoc_skip
-  profile $3
+  profile $4
   run_maven_with_standard_system_properties
 }
 
-
 # Note: Checkout folder of bonita-engine project need to be named community.
-build_maven_wrapper_install_maven_test_skip_with_target_directory_with_profile bonita-engine community tests,javadoc
-
-build_maven_install_maven_test_skip bonita-userfilters
+build_maven_wrapper_install_maven_test_skip_with_target_directory_with_profile bonitasoft bonita-engine community tests,javadoc
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
+  
+build_maven_install_maven_test_skip bonitasoft bonita-userfilters
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
 # Each connectors implementation version is defined in https://github.com/bonitasoft/bonita-studio/blob/$BONITA_BPM_VERSION/bundles/plugins/org.bonitasoft.studio.connectors/pom.xml.
 # For the version of bonita-connectors refers to one of the included connector and use the parent project version (parent project should be bonita-connectors).
 # You need to find connector git repository tag that provides a given connector implementation version.
-build_maven_install_maven_test_skip bonita-connectors 1.0.0
+build_maven_install_maven_test_skip bonitasoft bonita-connectors 1.0.0
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-alfresco 2.0.1
+build_maven_install_maven_test_skip bonitasoft bonita-connector-alfresco 2.0.1
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-cmis 3.0.1
+build_maven_install_maven_test_skip bonitasoft bonita-connector-cmis 3.0.1
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-database 1.2.2
+build_maven_install_maven_test_skip bonitasoft bonita-connector-database 1.2.2
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-email bonita-connector-email-impl-1.0.15
+build_maven_install_maven_test_skip bonitasoft bonita-connector-email bonita-connector-email-impl-1.0.15
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-googlecalendar-V3 bonita-connector-google-calendar-v3-1.0.0
+build_maven_install_maven_test_skip bonitasoft bonita-connector-googlecalendar-V3 bonita-connector-google-calendar-v3-1.0.0
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-ldap bonita-connector-ldap-1.0.1
+build_maven_install_maven_test_skip bonitasoft bonita-connector-ldap bonita-connector-ldap-1.0.1
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-rest 1.0.4
+build_maven_install_maven_test_skip bonitasoft bonita-connector-rest 1.0.4
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-salesforce 1.0.14
+build_maven_install_maven_test_skip bonitasoft bonita-connector-salesforce 1.0.14
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-scripting bonita-connector-scripting-20151015
+build_maven_install_maven_test_skip bonitasoft bonita-connector-scripting bonita-connector-scripting-20151015
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-twitter 1.1.0-pomfixed
+build_maven_install_maven_test_skip bonitasoft bonita-connector-twitter 1.1.0-pomfixed
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-connector-webservice 1.1.1
+build_maven_install_maven_test_skip bonitasoft bonita-connector-webservice 1.1.1
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
 # Version is defined in https://github.com/bonitasoft/bonita-studio/blob/$BONITA_BPM_VERSION/pom.xml.
-build_maven_install_maven_test_skip bonita-theme-builder 1.1.0
+build_maven_install_maven_test_skip bonitasoft bonita-theme-builder 1.1.0
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
 # Version is defined in https://github.com/bonitasoft/bonita-studio/blob/$BONITA_BPM_VERSION/pom.xml.
-build_maven_install_maven_test_skip bonita-studio-watchdog studio-watchdog-7.2.0
+build_maven_install_maven_test_skip bonitasoft bonita-studio-watchdog studio-watchdog-7.2.0
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-web-extensions
+build_maven_install_maven_test_skip bonitasoft bonita-web-extensions
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_skiptest bonita-web
+build_maven_install_skiptest bonitasoft bonita-web
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-portal-js
- 
+build_maven_install_maven_test_skip bonitasoft bonita-portal-js
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
+
 # Version is defined in https://github.com/bonitasoft/bonita-studio/blob/$BONITA_BPM_VERSION/pom.xml
-build_maven_install_skiptest bonita-ui-designer 1.7.59
+build_maven_install_skiptest bonitasoft bonita-ui-designer 1.7.59
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_install_maven_test_skip bonita-distrib
+build_maven_install_maven_test_skip bonitasoft bonita-distrib
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
 # Version is defined in https://github.com/bonitasoft/bonita-studio/blob/$BONITA_BPM_VERSION/pom.xml
-build_maven_install_maven_test_skip image-overlay-plugin image-overlay-plugin-1.0.4
+build_maven_install_maven_test_skip bonitasoft image-overlay-plugin image-overlay-plugin-1.0.4
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to continue..."
+fi
 
-build_maven_wrapper_verify_maven_test_skip_with_profile bonita-studio mirrored,generate
+build_maven_wrapper_verify_maven_test_skip_with_profile PierrickVouletBonitasoft bonita-studio mirrored,generate
+if [ $AUTO == "false" ]; then
+  read -p "Please enter any key to end..."
+fi
